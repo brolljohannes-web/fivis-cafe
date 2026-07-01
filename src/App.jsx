@@ -94,7 +94,7 @@ const DEFAULT_MENU = {
   ],
   other: [
     { id: "o1", en: "Thai Tea", th: "ชาไทย", price: 50 },
-    { id: "o2", en: "Iced Cacao", th: "คาเคาเย็น", price: 60 },
+    { id: "o2", en: "Iced Cacao", th: "ไอซ์โกโก้", price: 60 },
     { id: "o3", en: "Matcha Latte", th: "มัทฉะ ลาเต้", price: 60 },
     { id: "o4", en: "Pure Matcha Coconut", th: "มัทฉะมะพร้าวแท้", price: 90 },
     { id: "o5", en: "Tea", th: "ชา", price: 50 },
@@ -184,8 +184,6 @@ export default function App() {
   const [menu, setMenu] = useState(DEFAULT_MENU);
   const [menuLoaded, setMenuLoaded] = useState(false);
   const [cart, setCart] = useState([]);
-  const [table, setTable] = useState("");
-  const [tableError, setTableError] = useState(false);
   const [activeItem, setActiveItem] = useState(null); // item being customized
   const [lastOrderId, setLastOrderId] = useState(null);
   const [storageOk, setStorageOk] = useState(true);
@@ -231,15 +229,10 @@ export default function App() {
     );
 
   const submitOrder = async () => {
-    if (!table.trim()) {
-      setTableError(true);
-      return;
-    }
-    setTableError(false);
     const id = uid();
     const order = {
       id,
-      table_number: table.trim(),
+      table_number: "—",
       lang,
       items: cart.map((c) => ({
         en: c.en,
@@ -301,9 +294,6 @@ export default function App() {
           cart={cart}
           lang={lang}
           t={t}
-          table={table}
-          setTable={setTable}
-          tableError={tableError}
           changeQty={changeQty}
           removeFromCart={removeFromCart}
           cartTotal={cartTotal}
@@ -508,24 +498,13 @@ function ItemModal({ item, lang, t, onClose, onAdd }) {
 }
 
 /* ---------------------------- Cart view -------------------------------- */
-function CartView({ cart, lang, t, table, setTable, tableError, changeQty, removeFromCart, cartTotal, onBack, onSubmit }) {
+function CartView({ cart, lang, t, changeQty, removeFromCart, cartTotal, onBack, onSubmit }) {
   return (
     <div style={styles.body}>
       <button style={styles.backLink} onClick={onBack}>
         <ArrowLeft size={16} /> {t(UI.backToMenu)}
       </button>
       <div style={styles.sectionTitle}>{t(UI.yourOrder)}</div>
-
-      <div style={{ marginBottom: 18 }}>
-        <div style={styles.fieldLabel}>{t(UI.tableLabel)}</div>
-        <input
-          value={table}
-          onChange={(e) => setTable(e.target.value)}
-          placeholder={t(UI.tablePlaceholder)}
-          style={{ ...styles.textInput, ...(tableError ? { borderColor: "#c0392b" } : {}) }}
-        />
-        {tableError && <div style={styles.errorText}>{t(UI.enterTableFirst)}</div>}
-      </div>
 
       {cart.length === 0 ? (
         <div style={styles.emptyState}>{t(UI.emptyCart)}</div>
@@ -709,7 +688,7 @@ function BaristaView({ onEditMenu, onExit }) {
         {active.map((order) => (
           <div key={order.id} style={{ ...styles.ticket, ...(order.status === "new" ? styles.ticketNew : {}) }}>
             <div style={styles.ticketHeader}>
-              <span style={styles.ticketTable}>โต๊ะ {order.table}</span>
+              <span style={styles.ticketTable}>ออเดอร์ใหม่</span>
               <span style={styles.ticketTime}>
                 <Clock size={12} /> {timeAgo(order.createdAt, "th")}
               </span>
