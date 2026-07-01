@@ -653,7 +653,7 @@ function StaffArea({ view, setView, menu, setMenu }) {
 }
 
 function sendNotification(count) {
-  if (Notification.permission === "granted") {
+  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
     new Notification("Fivis Café — ออเดอร์ใหม่! 🔔", {
       body: `${count} ออเดอร์รอการทำ`,
       icon: "https://fivis-cafe.vercel.app/favicon.ico",
@@ -691,7 +691,7 @@ function playChime() {
 function BaristaView({ onEditMenu, onExit, onStats }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [notifAllowed, setNotifAllowed] = useState(Notification.permission);
+  const [notifAllowed, setNotifAllowed] = useState(typeof Notification !== "undefined" ? Notification.permission : "denied");
   const [error, setError] = useState(null);
   const timerRef = useRef(null);
   const prevNewCountRef = useRef(0);
@@ -724,13 +724,13 @@ function BaristaView({ onEditMenu, onExit, onStats }) {
       setOrders(valid);
       setLoading(false);
     } catch (e) {
-      setError("Error loading orders");
+      setError("Error: " + (e && e.message ? e.message : String(e)));
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (Notification.permission === "default") {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
       Notification.requestPermission().then((p) => setNotifAllowed(p));
     }
     fetchOrders();
