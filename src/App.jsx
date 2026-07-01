@@ -171,17 +171,6 @@ async function fetchActiveOrders() {
   const rows = await sb("orders?select=*&status=neq.served&order=created_at.asc");
   return rows || [];
 }
-async function fetchOrderStats(from, to) {
-  const params = new URLSearchParams({
-    select: "*",
-    status: "eq.served",
-    order: "created_at.asc",
-  });
-  params.append("created_at", `gte.${from}`);
-  params.append("created_at", `lte.${to}`);
-  const rows = await sb(`orders?${params.toString()}`);
-  return rows || [];
-}
 async function insertOrder(order) {
   return sb("orders", { method: "POST", body: JSON.stringify([order]) });
 }
@@ -964,24 +953,26 @@ function getPeriodRange(id) {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
   const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const toISO = (d) => d.toISOString();
 
   let from, to;
-  to = toISO(new Date(now.getTime() + 86400000)); // tomorrow to include today fully
+  // tomorrow as the end boundary so today's orders are included
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  to = fmt(tomorrow);
 
   if (id === "today") {
-    from = toISO(new Date(`${fmt(now)}T00:00:00`));
+    from = fmt(now);
   } else if (id === "week") {
     const day = now.getDay() || 7;
     const mon = new Date(now);
     mon.setDate(now.getDate() - day + 1);
-    from = toISO(new Date(`${fmt(mon)}T00:00:00`));
+    from = fmt(mon);
   } else if (id === "month") {
-    from = toISO(new Date(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-01T00:00:00`));
+    from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
   } else if (id === "year") {
-    from = toISO(new Date(`${now.getFullYear()}-01-01T00:00:00`));
+    from = `${now.getFullYear()}-01-01`;
   } else {
-    from = toISO(new Date("2020-01-01T00:00:00"));
+    from = "2020-01-01";
   }
   return { from, to };
 }
@@ -994,8 +985,10 @@ function StatsView({ onBack }) {
   useEffect(() => {
     setLoading(true);
     const { from, to } = getPeriodRange(period);
-    fetchOrderStats(from, to).then((rows) => {
-      setOrders(rows);
+    // build URL manually to avoid any encoding issues
+    const url = `orders?select=*&status=eq.served&created_at=gte.${from}&created_at=lte.${to}&order=created_at.asc`;
+    sb(url).then((rows) => {
+      setOrders(rows || []);
       setLoading(false);
     });
   }, [period]);
