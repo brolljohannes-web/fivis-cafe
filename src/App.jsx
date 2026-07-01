@@ -267,7 +267,7 @@ export default function App() {
     );
   }
 
-  if (view === "barista" || view === "editMenu" || view === "staffLogin") {
+  if (view === "barista" || view === "editMenu" || view === "staffLogin" || view === "stats") {
     return (
       <StaffArea
         view={view}
