@@ -649,27 +649,6 @@ function StaffArea({ view, setView, menu, setMenu }) {
   return <BaristaView onEditMenu={() => setView("editMenu")} onExit={handleExit} onStats={() => setView("stats")} />;
 }
 
-function playChime() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const notes = [523.25, 659.25, 783.99]; // C5 E5 G5
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      const start = ctx.currentTime + i * 0.18;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.35, start + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.45);
-      osc.start(start);
-      osc.stop(start + 0.45);
-    });
-  } catch (e) {}
-}
-
 function sendNotification(count) {
   if (Notification.permission === "granted") {
     new Notification("Fivis Café — ออเดอร์ใหม่! 🔔", {
@@ -681,15 +660,28 @@ function sendNotification(count) {
   }
 }
 
-// use localStorage so chimed IDs survive remounts and refreshes
-function getChimedIds() {
-  try { return new Set(JSON.parse(localStorage.getItem("fivis_chimed") || "[]")); }
-  catch (e) { return new Set(); }
-}
-function saveChimedId(id) {
+let _lastChimeTime = 0;
+function playChime() {
+  const now = Date.now();
+  if (now - _lastChimeTime < 10000) return; // max once per 10 seconds
+  _lastChimeTime = now;
   try {
-    const arr = [...getChimedIds(), id].slice(-200);
-    localStorage.setItem("fivis_chimed", JSON.stringify(arr));
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [523.25, 659.25, 783.99];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.3, start + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.4);
+      osc.start(start);
+      osc.stop(start + 0.4);
+    });
   } catch (e) {}
 }
 
@@ -697,30 +689,41 @@ function BaristaView({ onEditMenu, onExit, onStats }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notifAllowed, setNotifAllowed] = useState(Notification.permission);
+  const [error, setError] = useState(null);
   const timerRef = useRef(null);
+  const prevNewCountRef = useRef(0);
 
   const fetchOrders = useCallback(async () => {
-    const rows = await fetchActiveOrders();
-    const valid = (rows || []).map((r) => ({
-      id: r.id,
-      table: r.table_number,
-      items: r.items,
-      total: r.total,
-      status: r.status,
-      lang: r.lang,
-      createdAt: new Date(r.created_at).getTime(),
-    }));
+    try {
+      const rows = await fetchActiveOrders();
+      if (rows === null) {
+        setError("Connection error — retrying…");
+        return;
+      }
+      setError(null);
+      const valid = rows.map((r) => ({
+        id: r.id,
+        table: r.table_number,
+        items: r.items,
+        total: r.total,
+        status: r.status,
+        lang: r.lang,
+        createdAt: new Date(r.created_at).getTime(),
+      }));
 
-    const chimedIds = getChimedIds();
-    const brandNew = valid.filter((o) => o.status === "new" && !chimedIds.has(o.id));
-    if (brandNew.length > 0) {
-      playChime();
-      sendNotification(brandNew.length);
-      brandNew.forEach((o) => saveChimedId(o.id));
+      const newCount = valid.filter((o) => o.status === "new").length;
+      if (newCount > prevNewCountRef.current) {
+        playChime();
+        sendNotification(newCount - prevNewCountRef.current);
+      }
+      prevNewCountRef.current = newCount;
+
+      setOrders(valid);
+      setLoading(false);
+    } catch (e) {
+      setError("Error loading orders");
+      setLoading(false);
     }
-
-    setOrders(valid);
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -770,7 +773,11 @@ function BaristaView({ onEditMenu, onExit, onStats }) {
         </div>
       </div>
 
-      {notifAllowed === "denied" && (
+      {error && (
+        <div style={{ background: "#5a1a1a", color: "#f3c98a", fontSize: 13, padding: "8px 18px" }}>
+          ⚠️ {error}
+        </div>
+      )}
         <div style={{ background: "#5a2a10", color: "#f3c98a", fontSize: 12.5, padding: "8px 18px" }}>
           🔕 การแจ้งเตือนถูกบล็อก — เปิดการแจ้งเตือนในการตั้งค่าเบราว์เซอร์เพื่อรับการแจ้งเตือน
         </div>
