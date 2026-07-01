@@ -132,8 +132,10 @@ async function sb(path, options = {}) {
       "Content-Type": "application/json",
       ...(options.headers || {}),
     };
-    if (method !== "GET") {
+    if (method === "POST") {
       headers["Prefer"] = options.prefer || "return=representation";
+    } else if (method === "PATCH" || method === "DELETE") {
+      headers["Prefer"] = "return=minimal";
     }
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       ...options,
@@ -141,11 +143,12 @@ async function sb(path, options = {}) {
       headers,
     });
     if (!res.ok) {
-      console.error("Supabase error", res.status, await res.text());
+      const errText = await res.text();
+      console.error("Supabase error", res.status, errText);
       return null;
     }
     const text = await res.text();
-    return text ? JSON.parse(text) : [];
+    return text ? JSON.parse(text) : true;
   } catch (e) {
     console.error("Supabase request failed", e);
     return null;
