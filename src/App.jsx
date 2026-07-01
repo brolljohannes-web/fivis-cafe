@@ -129,9 +129,11 @@ async function sb(path, options = {}) {
     const headers = {
       apikey: SUPABASE_KEY,
       Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
       ...(options.headers || {}),
     };
+    if (method !== "GET") {
+      headers["Content-Type"] = "application/json";
+    }
     if (method === "POST") {
       headers["Prefer"] = options.prefer || "return=representation";
     } else if (method === "PATCH" || method === "DELETE") {
@@ -148,7 +150,8 @@ async function sb(path, options = {}) {
       return null;
     }
     const text = await res.text();
-    return text ? JSON.parse(text) : true;
+    if (!text || text.trim() === "") return method === "GET" ? [] : true;
+    return JSON.parse(text);
   } catch (e) {
     console.error("Supabase request failed", e);
     return null;
