@@ -681,13 +681,23 @@ function sendNotification(count) {
   }
 }
 
+// use localStorage so chimed IDs survive remounts and refreshes
+function getChimedIds() {
+  try { return new Set(JSON.parse(localStorage.getItem("fivis_chimed") || "[]")); }
+  catch (e) { return new Set(); }
+}
+function saveChimedId(id) {
+  try {
+    const arr = [...getChimedIds(), id].slice(-200);
+    localStorage.setItem("fivis_chimed", JSON.stringify(arr));
+  } catch (e) {}
+}
+
 function BaristaView({ onEditMenu, onExit, onStats }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notifAllowed, setNotifAllowed] = useState(Notification.permission);
   const timerRef = useRef(null);
-
-  const knownIdsRef = useRef(null);
 
   const fetchOrders = useCallback(async () => {
     const rows = await fetchActiveOrders();
@@ -701,18 +711,12 @@ function BaristaView({ onEditMenu, onExit, onStats }) {
       createdAt: new Date(r.created_at).getTime(),
     }));
 
-    const newOrders = valid.filter((o) => o.status === "new");
-
-    if (knownIdsRef.current === null) {
-      // first load — record existing orders silently, no chime
-      knownIdsRef.current = new Set(newOrders.map((o) => o.id));
-    } else {
-      const brandNew = newOrders.filter((o) => !knownIdsRef.current.has(o.id));
-      if (brandNew.length > 0) {
-        playChime();
-        sendNotification(brandNew.length);
-        brandNew.forEach((o) => knownIdsRef.current.add(o.id));
-      }
+    const chimedIds = getChimedIds();
+    const brandNew = valid.filter((o) => o.status === "new" && !chimedIds.has(o.id));
+    if (brandNew.length > 0) {
+      playChime();
+      sendNotification(brandNew.length);
+      brandNew.forEach((o) => saveChimedId(o.id));
     }
 
     setOrders(valid);
