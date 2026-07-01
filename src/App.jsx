@@ -619,10 +619,44 @@ function StaffArea({ view, setView, menu, setMenu }) {
   return <BaristaView onEditMenu={() => setView("editMenu")} onExit={() => setView("menu")} />;
 }
 
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [523.25, 659.25, 783.99]; // C5 E5 G5
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.35, start + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.45);
+      osc.start(start);
+      osc.stop(start + 0.45);
+    });
+  } catch (e) {}
+}
+
+function sendNotification(count) {
+  if (Notification.permission === "granted") {
+    new Notification("Fivis Café — ออเดอร์ใหม่! 🔔", {
+      body: `${count} ออเดอร์รอการทำ`,
+      icon: "https://fivis-cafe.vercel.app/favicon.ico",
+      tag: "new-order",
+      renotify: true,
+    });
+  }
+}
+
 function BaristaView({ onEditMenu, onExit }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notifAllowed, setNotifAllowed] = useState(Notification.permission);
   const timerRef = useRef(null);
+  const knownIdsRef = useRef(null); // null = first load, Set after
 
   const fetchOrders = useCallback(async () => {
     const rows = await fetchActiveOrders();
@@ -635,11 +669,30 @@ function BaristaView({ onEditMenu, onExit }) {
       lang: r.lang,
       createdAt: new Date(r.created_at).getTime(),
     }));
+
+    // detect genuinely new orders (not present on previous poll)
+    const newOrders = valid.filter((o) => o.status === "new");
+    if (knownIdsRef.current === null) {
+      // first load — just record what's already there, no alert
+      knownIdsRef.current = new Set(newOrders.map((o) => o.id));
+    } else {
+      const brandNew = newOrders.filter((o) => !knownIdsRef.current.has(o.id));
+      if (brandNew.length > 0) {
+        playChime();
+        sendNotification(brandNew.length);
+        brandNew.forEach((o) => knownIdsRef.current.add(o.id));
+      }
+    }
+
     setOrders(valid);
     setLoading(false);
   }, []);
 
   useEffect(() => {
+    // ask for notification permission as soon as barista opens the view
+    if (Notification.permission === "default") {
+      Notification.requestPermission().then((p) => setNotifAllowed(p));
+    }
     fetchOrders();
     timerRef.current = setInterval(fetchOrders, 4000);
     return () => clearInterval(timerRef.current);
@@ -679,6 +732,17 @@ function BaristaView({ onEditMenu, onExit }) {
           </button>
         </div>
       </div>
+
+      {notifAllowed === "denied" && (
+        <div style={{ background: "#5a2a10", color: "#f3c98a", fontSize: 12.5, padding: "8px 18px" }}>
+          🔕 การแจ้งเตือนถูกบล็อก — เปิดการแจ้งเตือนในการตั้งค่าเบราว์เซอร์เพื่อรับการแจ้งเตือน
+        </div>
+      )}
+      {notifAllowed === "default" && (
+        <div style={{ background: "#2a3a5a", color: "#a8c8f0", fontSize: 12.5, padding: "8px 18px" }}>
+          🔔 กรุณาอนุญาตการแจ้งเตือนเพื่อรับแจ้งเมื่อมีออเดอร์ใหม่
+        </div>
+      )}
 
       <div style={styles.ticketGrid}>
         {loading && <div style={{ color: "#cbb89a" }}>Loading…</div>}
