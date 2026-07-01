@@ -68,7 +68,51 @@ const SWEETNESS_OPTIONS = [
 ];
 const DEFAULT_SWEETNESS = "100";
 
-// Per-item add-on rules — overrides category defaults
+// Drink name translations for languages where English isn't clear enough
+const DRINK_NAMES = {
+  h1:  { zh: "美式咖啡", ru: "Американо", fr: "Americano" },
+  h2:  { zh: "长黑咖啡", ru: "Лонг блэк", fr: "Long Black" },
+  h3:  { zh: "意式浓缩", ru: "Эспрессо", fr: "Espresso" },
+  h4:  { zh: "玛奇朵", ru: "Макиато", fr: "Macchiato" },
+  h5:  { zh: "拿铁", ru: "Латте", fr: "Latte" },
+  h6:  { zh: "卡布奇诺", ru: "Капучино", fr: "Cappuccino" },
+  h7:  { zh: "馥芮白", ru: "Флэт уайт", fr: "Flat White" },
+  h8:  { zh: "мокко", ru: "Мокко", fr: "Moka", de: "Mokka" },
+  h9:  { zh: "科塔多", ru: "Кортадо", fr: "Cortado" },
+  h10: { zh: "小杯拿铁", ru: "Пикколо", fr: "Piccolo" },
+  i1:  { zh: "冰美式", ru: "Айс американо", fr: "Americano glacé", de: "Americano auf Eis" },
+  i2:  { zh: "冰长黑", ru: "Айс лонг блэк", fr: "Long Black glacé", de: "Long Black auf Eis" },
+  i3:  { zh: "蜂蜜美式", ru: "Американо с мёдом", fr: "Americano au miel", de: "Americano mit Honig" },
+  i4:  { zh: "椰子美式", ru: "Американо с кокосом", fr: "Americano coco", de: "Americano mit Kokosnuss" },
+  i5:  { zh: "冰浓缩", ru: "Айс эспрессо", fr: "Espresso glacé", de: "Espresso auf Eis" },
+  i6:  { zh: "冰摩卡", ru: "Айс мокко", fr: "Moka glacé", de: "Mokka auf Eis" },
+  i7:  { zh: "焦糖玛奇朵", ru: "Карамельный макиато", fr: "Macchiato caramel", de: "Karamell-Macchiato" },
+  i8:  { zh: "冰拿铁", ru: "Айс латте", fr: "Latte glacé", de: "Latte auf Eis" },
+  i9:  { zh: "冰卡布奇诺", ru: "Айс капучино", fr: "Cappuccino glacé", de: "Cappuccino auf Eis" },
+  i10: { zh: "弗雷多浓缩", ru: "Фреддо эспрессо", fr: "Freddo Espresso" },
+  i11: { zh: "弗雷多卡布奇诺", ru: "Фреддо капучино", fr: "Freddo Cappuccino" },
+  i12: { zh: "阿芙佳朵", ru: "Аффогато", fr: "Affogato" },
+  o1:  { zh: "泰式奶茶", ru: "Тайский чай", fr: "Thé thaïlandais", de: "Thailändischer Tee" },
+  o2:  { zh: "冰可可", ru: "Айс какао", fr: "Cacao glacé", de: "Kakao auf Eis" },
+  o3:  { zh: "抹茶拿铁", ru: "Матча латте", fr: "Latte matcha", de: "Matcha Latte" },
+  o4:  { zh: "纯抹茶椰子", ru: "Матча с кокосом", fr: "Matcha coco", de: "Matcha mit Kokosnuss" },
+  o5:  { zh: "茶", ru: "Чай", fr: "Thé", de: "Tee" },
+  o6:  { zh: "儿童奶泡", ru: "Бэби чино", fr: "Baby Chino" },
+  o7:  { zh: "椰子", ru: "Кокос", fr: "Noix de coco", de: "Kokosnuss" },
+};
+
+function getDrinkName(item, lang) {
+  if (lang === "th") return item.th;
+  if (DRINK_NAMES[item.id] && DRINK_NAMES[item.id][lang]) return DRINK_NAMES[item.id][lang];
+  return item.en;
+}
+
+function getDrinkSubtitle(item, lang) {
+  if (lang === "en") return null;
+  if (lang === "th") return item.en;
+  if (DRINK_NAMES[item.id] && DRINK_NAMES[item.id][lang]) return item.en;
+  return null;
+}
 const ITEM_ADDONS = {
   h1:  { milk: false, sweetness: true,  extraShot: true  }, // Americano
   h2:  { milk: false, sweetness: true,  extraShot: true  }, // Long Black
@@ -410,8 +454,8 @@ function MenuView({ menu, lang, t, activeItem, setActiveItem, addToCart }) {
           <div style={styles.itemGrid}>
             {items.map((item) => (
               <button key={item.id} style={styles.itemCard} onClick={() => setActiveItem({ ...item, catKey })}>
-                <div style={styles.itemNameEn}>{lang === "th" ? item.th : item.en}</div>
-                {lang === "th" && <div style={styles.itemNameTh}>{item.en}</div>}
+                <div style={styles.itemNameEn}>{getDrinkName(item, lang)}</div>
+                {getDrinkSubtitle(item, lang) && <div style={styles.itemNameTh}>{getDrinkSubtitle(item, lang)}</div>}
                 <div style={styles.itemPrice}>{moneyTHB(item.price)}</div>
               </button>
             ))}
@@ -443,8 +487,8 @@ function ItemModal({ item, lang, t, onClose, onAdd }) {
         <div style={styles.modalHandle} />
         <div style={styles.modalHeaderRow}>
           <div>
-            <div style={styles.modalTitle}>{lang === "th" ? item.th : item.en}</div>
-            {lang === "th" && <div style={styles.modalSubtitle}>{item.en}</div>}
+            <div style={styles.modalTitle}>{getDrinkName(item, lang)}</div>
+            {getDrinkSubtitle(item, lang) && <div style={styles.modalSubtitle}>{getDrinkSubtitle(item, lang)}</div>}
           </div>
           <button style={styles.iconBtn} onClick={onClose}>
             <X size={18} />
