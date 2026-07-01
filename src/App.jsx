@@ -125,15 +125,20 @@ const SUPABASE_KEY = "sb_publishable_3jgRpCddfKVpU69kOKH4Ug_KdOkaRsj";
 
 async function sb(path, options = {}) {
   try {
+    const method = options.method || "GET";
+    const headers = {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    };
+    if (method !== "GET") {
+      headers["Prefer"] = options.prefer || "return=representation";
+    }
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       ...options,
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: options.prefer || "return=representation",
-        ...(options.headers || {}),
-      },
+      method,
+      headers,
     });
     if (!res.ok) {
       console.error("Supabase error", res.status, await res.text());
@@ -167,9 +172,14 @@ async function fetchActiveOrders() {
   return rows || [];
 }
 async function fetchOrderStats(from, to) {
-  const rows = await sb(
-    `orders?select=*&status=eq.served&created_at=gte.${from}&created_at=lte.${to}&order=created_at.asc`
-  );
+  const params = new URLSearchParams({
+    select: "*",
+    status: "eq.served",
+    order: "created_at.asc",
+  });
+  params.append("created_at", `gte.${from}`);
+  params.append("created_at", `lte.${to}`);
+  const rows = await sb(`orders?${params.toString()}`);
   return rows || [];
 }
 async function insertOrder(order) {
