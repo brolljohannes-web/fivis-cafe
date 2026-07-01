@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Coffee, Plus, Minus, X, ShoppingBag, Check, ChefHat, Clock, ArrowLeft, Settings, Trash2, Pencil, RefreshCw } from "lucide-react";
+import { Coffee, Plus, Minus, X, ShoppingBag, Check, ChefHat, Clock, ArrowLeft, Settings, Trash2, Pencil, RefreshCw, BarChart2 } from "lucide-react";
 
 /* ---------------------------------------------------------
    FIVIS CAFÉ — QR ordering
@@ -164,6 +164,12 @@ async function deleteMenuRow(id) {
 
 async function fetchActiveOrders() {
   const rows = await sb("orders?select=*&status=neq.served&order=created_at.asc");
+  return rows || [];
+}
+async function fetchOrderStats(from, to) {
+  const rows = await sb(
+    `orders?select=*&status=eq.served&created_at=gte.${from}&created_at=lte.${to}&order=created_at.asc`
+  );
   return rows || [];
 }
 async function insertOrder(order) {
@@ -633,7 +639,11 @@ function StaffArea({ view, setView, menu, setMenu }) {
     return <EditMenuView menu={menu} setMenu={setMenu} onDone={() => setView("barista")} />;
   }
 
-  return <BaristaView onEditMenu={() => setView("editMenu")} onExit={handleExit} />;
+  if (view === "stats") {
+    return <StatsView onBack={() => setView("barista")} />;
+  }
+
+  return <BaristaView onEditMenu={() => setView("editMenu")} onExit={handleExit} onStats={() => setView("stats")} />;
 }
 
 function playChime() {
@@ -668,7 +678,7 @@ function sendNotification(count) {
   }
 }
 
-function BaristaView({ onEditMenu, onExit }) {
+function BaristaView({ onEditMenu, onExit, onStats }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notifAllowed, setNotifAllowed] = useState(Notification.permission);
@@ -720,10 +730,10 @@ function BaristaView({ onEditMenu, onExit }) {
     await updateOrderStatus(order.id, status);
     setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
     if (status === "served") {
-      setTimeout(async () => {
-        await deleteOrder(order.id);
+      // keep in DB for statistics — just remove from the live board after a short delay
+      setTimeout(() => {
         setOrders((prev) => prev.filter((o) => o.id !== order.id));
-      }, 600);
+      }, 800);
     }
   };
 
@@ -740,6 +750,9 @@ function BaristaView({ onEditMenu, onExit }) {
         <div style={{ display: "flex", gap: 8 }}>
           <button style={styles.baristaTopBtn} onClick={fetchOrders}>
             <RefreshCw size={14} /> Refresh
+          </button>
+          <button style={styles.baristaTopBtn} onClick={onStats}>
+            <BarChart2 size={14} /> Stats
           </button>
           <button style={styles.baristaTopBtn} onClick={onEditMenu}>
             <Pencil size={14} /> Menu
@@ -923,6 +936,194 @@ function EditMenuView({ menu, setMenu, onDone }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ============================ STATS VIEW =============================== */
+
+const PERIODS = [
+  { id: "today", label: "Today" },
+  { id: "week", label: "This week" },
+  { id: "month", label: "This month" },
+  { id: "year", label: "This year" },
+  { id: "all", label: "All time" },
+];
+
+function getPeriodRange(id) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const toISO = (d) => d.toISOString();
+
+  let from, to;
+  to = toISO(new Date(now.getTime() + 86400000)); // tomorrow to include today fully
+
+  if (id === "today") {
+    from = toISO(new Date(`${fmt(now)}T00:00:00`));
+  } else if (id === "week") {
+    const day = now.getDay() || 7;
+    const mon = new Date(now);
+    mon.setDate(now.getDate() - day + 1);
+    from = toISO(new Date(`${fmt(mon)}T00:00:00`));
+  } else if (id === "month") {
+    from = toISO(new Date(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-01T00:00:00`));
+  } else if (id === "year") {
+    from = toISO(new Date(`${now.getFullYear()}-01-01T00:00:00`));
+  } else {
+    from = toISO(new Date("2020-01-01T00:00:00"));
+  }
+  return { from, to };
+}
+
+function StatsView({ onBack }) {
+  const [period, setPeriod] = useState("week");
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const { from, to } = getPeriodRange(period);
+    fetchOrderStats(from, to).then((rows) => {
+      setOrders(rows);
+      setLoading(false);
+    });
+  }, [period]);
+
+  const totalOrders = orders.length;
+  const totalRevenue = orders.reduce((s, o) => s + (o.total || 0), 0);
+
+  // count individual items
+  const itemCounts = {};
+  orders.forEach((o) => {
+    (o.items || []).forEach((it) => {
+      const key = it.en;
+      if (!itemCounts[key]) itemCounts[key] = { name: it.en, th: it.th, qty: 0, revenue: 0 };
+      itemCounts[key].qty += it.qty;
+      itemCounts[key].revenue += it.unitPrice * it.qty;
+    });
+  });
+  const topItems = Object.values(itemCounts).sort((a, b) => b.qty - a.qty).slice(0, 8);
+  const maxQty = topItems[0]?.qty || 1;
+
+  // daily revenue for mini chart
+  const dayMap = {};
+  orders.forEach((o) => {
+    const d = o.created_at ? o.created_at.slice(0, 10) : "?";
+    dayMap[d] = (dayMap[d] || 0) + (o.total || 0);
+  });
+  const days = Object.entries(dayMap).sort(([a], [b]) => a.localeCompare(b));
+  const maxRev = Math.max(...days.map(([, v]) => v), 1);
+
+  return (
+    <div style={{ ...styles.page, background: "#241a10", minHeight: "100vh" }}>
+      <style>{globalCss}</style>
+      <div style={styles.baristaHeader}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <BarChart2 size={20} color="#f3e3c8" />
+          <span style={{ color: "#f3e3c8", fontWeight: 800, fontSize: 18 }}>Statistics</span>
+        </div>
+        <button style={styles.baristaTopBtn} onClick={onBack}>
+          <ArrowLeft size={14} /> Back
+        </button>
+      </div>
+
+      {/* Period selector */}
+      <div style={{ display: "flex", gap: 8, padding: "14px 18px", overflowX: "auto" }}>
+        {PERIODS.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setPeriod(p.id)}
+            style={{
+              flex: "0 0 auto",
+              background: period === p.id ? "#C8704A" : "#33261A",
+              color: period === p.id ? "#fff" : "#cbb89a",
+              border: "none",
+              borderRadius: 10,
+              padding: "8px 14px",
+              fontWeight: 600,
+              fontSize: 13,
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ color: "#cbb89a", padding: 30 }}>Loading…</div>
+      ) : (
+        <div style={{ padding: "0 18px 40px" }}>
+
+          {/* Summary cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 22 }}>
+            {[
+              { label: "Orders served", value: totalOrders },
+              { label: "Total revenue", value: `฿${totalRevenue.toLocaleString()}` },
+            ].map((card) => (
+              <div key={card.label} style={styles.statCard}>
+                <div style={styles.statCardLabel}>{card.label}</div>
+                <div style={styles.statCardValue}>{card.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Daily revenue bar chart */}
+          {days.length > 1 && (
+            <div style={{ marginBottom: 26 }}>
+              <div style={styles.statsSection}>Revenue by day</div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 80 }}>
+                {days.map(([date, rev]) => (
+                  <div key={date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                    <div style={{ fontSize: 10, color: "#9a8770" }}>฿{rev}</div>
+                    <div
+                      style={{
+                        width: "100%",
+                        background: "#C8704A",
+                        borderRadius: "4px 4px 0 0",
+                        height: `${Math.max(8, (rev / maxRev) * 54)}px`,
+                      }}
+                    />
+                    <div style={{ fontSize: 9, color: "#6a5a48", whiteSpace: "nowrap" }}>
+                      {date.slice(5)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top items */}
+          <div style={styles.statsSection}>Most ordered items</div>
+          {topItems.length === 0 && (
+            <div style={{ color: "#6a5a48", fontSize: 13 }}>No orders in this period.</div>
+          )}
+          {topItems.map((it) => (
+            <div key={it.name} style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <div>
+                  <span style={{ color: "#f3e3c8", fontWeight: 700, fontSize: 14 }}>{it.th}</span>
+                  <span style={{ color: "#7a6a58", fontSize: 12, marginLeft: 6 }}>{it.name}</span>
+                </div>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <span style={{ color: "#cbb89a", fontSize: 13 }}>{it.qty}×</span>
+                  <span style={{ color: "#C8704A", fontWeight: 700, fontSize: 13 }}>฿{it.revenue}</span>
+                </div>
+              </div>
+              <div style={{ background: "#33261A", borderRadius: 4, height: 6, overflow: "hidden" }}>
+                <div
+                  style={{
+                    background: "#C8704A",
+                    height: "100%",
+                    width: `${(it.qty / maxQty) * 100}%`,
+                    borderRadius: 4,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1161,4 +1362,8 @@ const styles = {
   editRow: { display: "flex", gap: 8, alignItems: "center" },
   editInput: { flex: 1, background: "#33261A", border: "1px solid #4a3a26", borderRadius: 8, padding: "9px 10px", color: "#f3e3c8", fontSize: 13.5 },
   addItemBtn: { display: "flex", alignItems: "center", gap: 6, background: "none", border: "1px dashed #4a3a26", color: "#cbb89a", borderRadius: 9, padding: "8px 12px", fontSize: 13, marginTop: 8 },
+  statCard: { background: "#33261A", borderRadius: 14, padding: "14px 16px" },
+  statCardLabel: { color: "#9a8770", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 },
+  statCardValue: { color: "#f3e3c8", fontSize: 24, fontWeight: 800 },
+  statsSection: { color: "#cbb89a", fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12, marginTop: 4 },
 };
