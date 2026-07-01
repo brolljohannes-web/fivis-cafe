@@ -314,8 +314,9 @@ export default function App() {
         <ConfirmedView
           t={t}
           onNew={() => {
-            setTable("");
+            setCart([]);
             setView("menu");
+            window.scrollTo(0, 0);
           }}
         />
       )}
