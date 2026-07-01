@@ -653,14 +653,8 @@ function StaffArea({ view, setView, menu, setMenu }) {
 }
 
 function sendNotification(count) {
-  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-    new Notification("Fivis Café — ออเดอร์ใหม่! 🔔", {
-      body: `${count} ออเดอร์รอการทำ`,
-      icon: "https://fivis-cafe.vercel.app/favicon.ico",
-      tag: "new-order",
-      renotify: true,
-    });
-  }
+  // Browser notifications not supported on mobile Chrome without a Service Worker
+  // Audio chime handles the alert instead
 }
 
 let _lastChimeTime = 0;
@@ -691,7 +685,6 @@ function playChime() {
 function BaristaView({ onEditMenu, onExit, onStats }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [notifAllowed, setNotifAllowed] = useState(typeof Notification !== "undefined" ? Notification.permission : "denied");
   const [error, setError] = useState(null);
   const timerRef = useRef(null);
   const prevNewCountRef = useRef(0);
@@ -730,9 +723,6 @@ function BaristaView({ onEditMenu, onExit, onStats }) {
   }, []);
 
   useEffect(() => {
-    if (typeof Notification !== "undefined" && Notification.permission === "default") {
-      Notification.requestPermission().then((p) => setNotifAllowed(p));
-    }
     fetchOrders();
     timerRef.current = setInterval(fetchOrders, 3000);
     return () => clearInterval(timerRef.current);
@@ -779,15 +769,6 @@ function BaristaView({ onEditMenu, onExit, onStats }) {
       {error && (
         <div style={{ background: "#5a1a1a", color: "#f3c98a", fontSize: 13, padding: "8px 18px" }}>
           ⚠️ {error}
-        </div>
-      )}
-        <div style={{ background: "#5a2a10", color: "#f3c98a", fontSize: 12.5, padding: "8px 18px" }}>
-          🔕 การแจ้งเตือนถูกบล็อก — เปิดการแจ้งเตือนในการตั้งค่าเบราว์เซอร์เพื่อรับการแจ้งเตือน
-        </div>
-      )}
-      {notifAllowed === "default" && (
-        <div style={{ background: "#2a3a5a", color: "#a8c8f0", fontSize: 12.5, padding: "8px 18px" }}>
-          🔔 กรุณาอนุญาตการแจ้งเตือนเพื่อรับแจ้งเมื่อมีออเดอร์ใหม่
         </div>
       )}
 
