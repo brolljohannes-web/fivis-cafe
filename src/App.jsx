@@ -410,8 +410,8 @@ function MenuView({ menu, lang, t, activeItem, setActiveItem, addToCart }) {
           <div style={styles.itemGrid}>
             {items.map((item) => (
               <button key={item.id} style={styles.itemCard} onClick={() => setActiveItem({ ...item, catKey })}>
-                <div style={styles.itemNameEn}>{item.en}</div>
-                {lang !== "en" && <div style={styles.itemNameTh}>{item.th}</div>}
+                <div style={styles.itemNameEn}>{lang === "th" ? item.th : item.en}</div>
+                {lang === "th" && <div style={styles.itemNameTh}>{item.en}</div>}
                 <div style={styles.itemPrice}>{moneyTHB(item.price)}</div>
               </button>
             ))}
@@ -443,8 +443,8 @@ function ItemModal({ item, lang, t, onClose, onAdd }) {
         <div style={styles.modalHandle} />
         <div style={styles.modalHeaderRow}>
           <div>
-            <div style={styles.modalTitle}>{item.en}</div>
-            {lang !== "en" && <div style={styles.modalSubtitle}>{item.th}</div>}
+            <div style={styles.modalTitle}>{lang === "th" ? item.th : item.en}</div>
+            {lang === "th" && <div style={styles.modalSubtitle}>{item.en}</div>}
           </div>
           <button style={styles.iconBtn} onClick={onClose}>
             <X size={18} />
