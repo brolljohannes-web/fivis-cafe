@@ -722,9 +722,67 @@ function BaristaView({ onEditMenu, onExit, onStats }) {
     if (Notification.permission === "default") {
       Notification.requestPermission().then((p) => setNotifAllowed(p));
     }
+
+    // initial load
     fetchOrders();
-    timerRef.current = setInterval(fetchOrders, 4000);
-    return () => clearInterval(timerRef.current);
+
+    // Supabase real-time subscription — fires instantly when any order row changes
+    let channel = null;
+    try {
+      const REALTIME_URL = `${SUPABASE_URL}/realtime/v1/websocket?apikey=${SUPABASE_KEY}&vsn=1.0.0`;
+      const ws = new WebSocket(REALTIME_URL);
+      let heartbeat = null;
+
+      ws.onopen = () => {
+        // join the orders table broadcast
+        ws.send(JSON.stringify({
+          topic: "realtime:public:orders",
+          event: "phx_join",
+          payload: { config: { broadcast: { self: false }, presence: { key: "" }, postgres_changes: [{ event: "*", schema: "public", table: "orders" }] } },
+          ref: "1",
+        }));
+        heartbeat = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ topic: "phoenix", event: "heartbeat", payload: {}, ref: null }));
+          }
+        }, 20000);
+      };
+
+      ws.onmessage = (msg) => {
+        try {
+          const data = JSON.parse(msg.data);
+          if (data.event === "postgres_changes" || (data.payload && data.payload.data)) {
+            fetchOrders();
+          }
+        } catch (e) {}
+      };
+
+      ws.onerror = () => {
+        // WebSocket failed — fall back to polling every 4 seconds
+        timerRef.current = setInterval(fetchOrders, 4000);
+      };
+
+      ws.onclose = () => {
+        if (heartbeat) clearInterval(heartbeat);
+        // reconnect via polling if socket closes unexpectedly
+        if (!timerRef.current) {
+          timerRef.current = setInterval(fetchOrders, 4000);
+        }
+      };
+
+      channel = ws;
+    } catch (e) {
+      // WebSocket not supported — fall back to polling
+      timerRef.current = setInterval(fetchOrders, 4000);
+    }
+
+    // polling fallback every 8s even with WebSocket (safety net)
+    timerRef.current = setInterval(fetchOrders, 8000);
+
+    return () => {
+      if (channel) channel.close();
+      clearInterval(timerRef.current);
+    };
   }, [fetchOrders]);
 
   const setStatus = async (order, status) => {
