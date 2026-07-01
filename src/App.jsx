@@ -40,6 +40,9 @@ const UI = {
   newOrder: { en: "Start a new order", th: "สั่งออเดอร์ใหม่", zh: "开始新订单", ru: "Новый заказ", de: "Neue Bestellung", fr: "Nouvelle commande" },
   staff: { en: "Staff", th: "พนักงาน", zh: "员工", ru: "Персонал", de: "Personal", fr: "Personnel" },
   each: { en: "ea.", th: "/แก้ว", zh: "每份", ru: "за шт.", de: "/Stk.", fr: "/unité" },
+  serveType: { en: "Serve", th: "การเสิร์ฟ", zh: "用餐方式", ru: "Подача", de: "Service", fr: "Service" },
+  drinkHere: { en: "Drink here", th: "ทานที่ร้าน", zh: "堂食", ru: "В зале", de: "Im Haus", fr: "Sur place" },
+  takeaway: { en: "Take away", th: "ห่อกลับ", zh: "外带", ru: "С собой", de: "Zum Mitnehmen", fr: "À emporter" },
 };
 
 const CATEGORY_NAMES = {
@@ -64,6 +67,31 @@ const SWEETNESS_OPTIONS = [
   { id: "100", label: { en: "100%", th: "หวานปกติ 100%", zh: "100%（正常）", ru: "100% (обычная)", de: "100 % (normal)", fr: "100 % (normal)" } },
 ];
 const DEFAULT_SWEETNESS = "100";
+
+// Per-item add-on rules — overrides category defaults
+const ITEM_ADDONS = {
+  h1:  { milk: false, sweetness: true,  extraShot: true  }, // Americano
+  h2:  { milk: false, sweetness: true,  extraShot: true  }, // Long Black
+  h3:  { milk: false, sweetness: false, extraShot: true  }, // Espresso — extra shot only
+  i1:  { milk: false, sweetness: true,  extraShot: true  }, // Iced Americano
+  i2:  { milk: false, sweetness: true,  extraShot: true  }, // Iced Long Black
+  i3:  { milk: false, sweetness: true,  extraShot: true  }, // Honey Americano
+  i4:  { milk: false, sweetness: true,  extraShot: true  }, // Coconut Americano
+  i5:  { milk: false, sweetness: false, extraShot: true  }, // Iced Espresso — extra shot only
+  i10: { milk: false, sweetness: true,  extraShot: true  }, // Freddo Espresso
+  i12: { milk: false, sweetness: false, extraShot: false }, // Affogato — no add-ons
+  o3:  { milk: true,  sweetness: true,  extraShot: false }, // Matcha Latte
+  o4:  { milk: false, sweetness: true,  extraShot: false }, // Pure Matcha Coconut
+  o5:  { milk: false, sweetness: false, extraShot: false }, // Tea — no add-ons
+  o6:  { milk: true,  sweetness: true,  extraShot: false }, // Baby Chino
+  o7:  { milk: false, sweetness: false, extraShot: false }, // Coconut — no add-ons
+};
+
+function getAddons(item) {
+  if (ITEM_ADDONS[item.id]) return ITEM_ADDONS[item.id];
+  const isCoffee = item.catKey === "hot" || item.catKey === "iced";
+  return { milk: isCoffee, sweetness: true, extraShot: isCoffee };
+}
 
 const DEFAULT_MENU = {
   hot: [
@@ -253,6 +281,7 @@ export default function App() {
         milk: c.milk,
         sweetness: c.sweetness,
         extraShot: c.extraShot,
+        serveType: c.serveType,
         notes: c.notes,
       })),
       total: cartTotal,
@@ -402,10 +431,11 @@ function ItemModal({ item, lang, t, onClose, onAdd }) {
   const [milk, setMilk] = useState(MILK_OPTIONS[0]);
   const [sweetness, setSweetness] = useState(SWEETNESS_OPTIONS.find((s) => s.id === DEFAULT_SWEETNESS));
   const [extraShot, setExtraShot] = useState(false);
+  const [serveType, setServeType] = useState("here");
   const [notes, setNotes] = useState("");
 
-  const isCoffee = item.catKey === "hot" || item.catKey === "iced";
-  const unitPrice = item.price + (isCoffee ? milk.price : 0) + (extraShot ? EXTRA_SHOT_PRICE : 0);
+  const addons = getAddons(item);
+  const unitPrice = item.price + (addons.milk ? milk.price : 0) + (extraShot && addons.extraShot ? EXTRA_SHOT_PRICE : 0);
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
@@ -421,7 +451,7 @@ function ItemModal({ item, lang, t, onClose, onAdd }) {
           </button>
         </div>
 
-        {isCoffee && (
+        {addons.milk && (
           <div style={{ marginBottom: 18 }}>
             <div style={styles.fieldLabel}>{t(UI.milk)}</div>
             <div style={styles.optionList}>
@@ -439,30 +469,59 @@ function ItemModal({ item, lang, t, onClose, onAdd }) {
           </div>
         )}
 
+        {addons.sweetness && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={styles.fieldLabel}>{t(UI.sweetness)}</div>
+            <div style={styles.optionList}>
+              {SWEETNESS_OPTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSweetness(s)}
+                  style={{ ...styles.optionRow, ...(sweetness.id === s.id ? styles.optionRowActive : {}) }}
+                >
+                  <span>{t(s.label)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {addons.extraShot && (
+          <button
+            onClick={() => setExtraShot((s) => !s)}
+            style={{ ...styles.toggleRow, ...(extraShot ? styles.toggleRowActive : {}) }}
+          >
+            <span style={styles.checkbox}>{extraShot && <Check size={13} color="#fff" />}</span>
+            <span style={{ flex: 1, textAlign: "left" }}>{t(UI.extraShot)}</span>
+            <span style={{ color: "#8a6a4a" }}>+{moneyTHB(EXTRA_SHOT_PRICE)}</span>
+          </button>
+        )}
+
+
         <div style={{ marginBottom: 18 }}>
-          <div style={styles.fieldLabel}>{t(UI.sweetness)}</div>
-          <div style={styles.optionList}>
-            {SWEETNESS_OPTIONS.map((s) => (
+          <div style={styles.fieldLabel}>{t(UI.serveType)}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[
+              { id: "here", label: UI.drinkHere, icon: "🪑" },
+              { id: "takeaway", label: UI.takeaway, icon: "🥤" },
+            ].map((opt) => (
               <button
-                key={s.id}
-                onClick={() => setSweetness(s)}
-                style={{ ...styles.optionRow, ...(sweetness.id === s.id ? styles.optionRowActive : {}) }}
+                key={opt.id}
+                onClick={() => setServeType(opt.id)}
+                style={{
+                  ...styles.optionRow,
+                  flex: 1,
+                  justifyContent: "center",
+                  gap: 8,
+                  ...(serveType === opt.id ? styles.optionRowActive : {}),
+                }}
               >
-                <span>{t(s.label)}</span>
+                <span style={{ fontSize: 18 }}>{opt.icon}</span>
+                <span>{t(opt.label)}</span>
               </button>
             ))}
           </div>
         </div>
-
-        <button
-          onClick={() => setExtraShot((s) => !s)}
-          style={{ ...styles.toggleRow, ...(extraShot ? styles.toggleRowActive : {}) }}
-        >
-          <span style={styles.checkbox}>{extraShot && <Check size={13} color="#fff" />}</span>
-          <span style={{ flex: 1, textAlign: "left" }}>{t(UI.extraShot)}</span>
-          <span style={{ color: "#8a6a4a" }}>+{moneyTHB(EXTRA_SHOT_PRICE)}</span>
-        </button>
-
 
         <div style={{ margin: "16px 0" }}>
           <div style={styles.fieldLabel}>{t(UI.notes)}</div>
@@ -492,11 +551,12 @@ function ItemModal({ item, lang, t, onClose, onAdd }) {
                 th: item.th,
                 unitPrice,
                 qty,
-                milk: isCoffee ? milk.id : null,
-                milkLabel: isCoffee ? t(milk.name) : null,
-                sweetness: sweetness.id,
-                sweetnessLabel: t(sweetness.label),
-                extraShot,
+                milk: addons.milk ? milk.id : null,
+                milkLabel: addons.milk ? t(milk.name) : null,
+                sweetness: addons.sweetness ? sweetness.id : null,
+                sweetnessLabel: addons.sweetness ? t(sweetness.label) : null,
+                extraShot: addons.extraShot ? extraShot : false,
+                serveType,
                 notes: notes.trim(),
               })
             }
@@ -527,7 +587,7 @@ function CartView({ cart, lang, t, changeQty, removeFromCart, cartTotal, onBack,
               <div style={{ flex: 1 }}>
                 <div style={styles.itemNameEn}>{c.en}</div>
                 <div style={{ fontSize: 12.5, color: "#9a8770", marginTop: 2 }}>
-                  {[c.milkLabel, c.sweetnessLabel, c.extraShot ? t(UI.extraShot) : null].filter(Boolean).join(" · ")}
+                  {[c.milkLabel, c.sweetnessLabel, c.extraShot ? t(UI.extraShot) : null, c.serveType === "takeaway" ? "🥤 " + t(UI.takeaway) : "🪑 " + t(UI.drinkHere)].filter(Boolean).join(" · ")}
                 </div>
                 {c.notes && <div style={{ fontSize: 12.5, color: "#9a8770", fontStyle: "italic" }}>"{c.notes}"</div>}
                 <div style={{ fontSize: 13, color: "#5d4a34", marginTop: 4 }}>{moneyTHB(c.unitPrice)} {t(UI.each)}</div>
@@ -788,8 +848,16 @@ function BaristaView({ onEditMenu, onExit, onStats }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "10px 0" }}>
               {order.items.map((it, i) => (
                 <div key={i} style={styles.ticketItem}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={styles.ticketItemTh}>{it.th} <span style={{ color: "#cbb89a", fontWeight: 600 }}>×{it.qty}</span></span>
+                    <span style={{
+                      background: it.serveType === "takeaway" ? "#4a2a10" : "#1a3a2a",
+                      color: it.serveType === "takeaway" ? "#f3c98a" : "#7dcca8",
+                      fontSize: 11.5, fontWeight: 700,
+                      padding: "2px 8px", borderRadius: 6, whiteSpace: "nowrap",
+                    }}>
+                      {it.serveType === "takeaway" ? "🥤 ห่อกลับ" : "🪑 ทานที่ร้าน"}
+                    </span>
                   </div>
                   <div style={{ fontSize: 12, color: "#a08a6c" }}>{it.en}</div>
                   {(it.milk && it.milk !== "regular") || it.extraShot || (it.sweetness && it.sweetness !== "100") || it.notes ? (
