@@ -569,10 +569,33 @@ function ConfirmedView({ t, onNew }) {
 
 /* ============================ STAFF AREA =============================== */
 
+const STAFF_AUTH_KEY = "fivis_staff_authed";
+
 function StaffArea({ view, setView, menu, setMenu }) {
-  const [authed, setAuthed] = useState(false);
+  const [authed, setAuthed] = useState(() => localStorage.getItem(STAFF_AUTH_KEY) === "true");
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState(false);
+
+  // if already authed from localStorage and we just hit staffLogin, jump straight to barista
+  useEffect(() => {
+    if (authed && view === "staffLogin") setView("barista");
+  }, [authed, view, setView]);
+
+  const handleUnlock = () => {
+    if (pin === STAFF_PIN) {
+      localStorage.setItem(STAFF_AUTH_KEY, "true");
+      setAuthed(true);
+      setView("barista");
+    } else {
+      setPinError(true);
+    }
+  };
+
+  const handleExit = () => {
+    localStorage.removeItem(STAFF_AUTH_KEY);
+    setAuthed(false);
+    setView("menu");
+  };
 
   if (view === "staffLogin" && !authed) {
     return (
@@ -588,19 +611,13 @@ function StaffArea({ view, setView, menu, setMenu }) {
             }}
             placeholder="••••"
             type="password"
+            onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
             style={{ ...styles.textInput, textAlign: "center", letterSpacing: 6, fontSize: 20, marginTop: 14 }}
           />
           {pinError && <div style={styles.errorText}>Incorrect PIN</div>}
           <button
             style={{ ...styles.primaryBtn, width: "100%", marginTop: 16 }}
-            onClick={() => {
-              if (pin === STAFF_PIN) {
-                setAuthed(true);
-                setView("barista");
-              } else {
-                setPinError(true);
-              }
-            }}
+            onClick={handleUnlock}
           >
             Unlock
           </button>
@@ -616,7 +633,7 @@ function StaffArea({ view, setView, menu, setMenu }) {
     return <EditMenuView menu={menu} setMenu={setMenu} onDone={() => setView("barista")} />;
   }
 
-  return <BaristaView onEditMenu={() => setView("editMenu")} onExit={() => setView("menu")} />;
+  return <BaristaView onEditMenu={() => setView("editMenu")} onExit={handleExit} />;
 }
 
 function playChime() {
